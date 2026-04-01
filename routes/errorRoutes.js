@@ -1,407 +1,400 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const Error = require("../models/Error");
-const logger = require("../config/logger");
-const crypto = require("crypto");
-const errorGrouper = require("../utils/errorGrouping");
-const aiExplainer = require("../utils/aiExplainer");
-const { authMiddleware } = require("../middleware/auth");
-const { logActivity } = require("../middleware/activityLogger");
+const Error = require('../models/Error');
+const Comment = require('../models/Comment');
+const ActivityLog = require('../models/ActivityLog');
+const { authMiddleware } = require('../middleware/auth');
+const { isAdmin } = require('../middleware/rbac');
+const { logActivity } = require('../middleware/activityLogger');
+const errorGrouper = require('../utils/errorGrouping');
+const { explainError } = require('../utils/aiExplainer');
+const logger = require('../config/logger');
 
-const VALID_SEVERITIES = ["low", "medium", "high"];
-const VALID_ENVIRONMENTS = ["development", "staging", "production"];
-
-function validateSeverity(severity) {
-  if (!severity) return "medium";
-  return VALID_SEVERITIES.includes(severity.toLowerCase())
-    ? severity.toLowerCase()
-    : "medium";
-}
-
-function validateEnvironment(environment) {
-  if (!environment) return "development";
-  return VALID_ENVIRONMENTS.includes(environment.toLowerCase())
-    ? environment.toLowerCase()
-    : "development";
-}
-
-function validateErrorInput(req) {
-  const { message, stack, projectId } = req.body;
-  const errors = [];
-
-  if (!message || typeof message !== "string" || message.trim().length === 0) {
-    errors.push("message is required");
-  }
-  if (!stack || typeof stack !== "string" || stack.trim().length === 0) {
-    errors.push("stack is required");
-  }
-  if (!projectId || typeof projectId !== "string" || projectId.trim().length === 0) {
-    errors.push("projectId is required");
-  }
-
-  return errors;
-}
-
-// POST /api/errors/log
-router.post("/log", async (req, res) => {
+// POST /api/errors/log - Log a new error
+router.post('/log', authMiddleware, async (req, res) => {
   try {
-    const validationErrors = validateErrorInput(req);
-    if (validationErrors.length > 0) {
-      logger.warn("Error validation failed", { errors: validationErrors });
+    const { message, stack, projectId, severity, environment } = req.body;
+
+    // Validate input
+    if (!message || !projectId) {
       return res.status(400).json({
         success: false,
-        errors: validationErrors,
+        message: 'Message and projectId are required',
       });
     }
 
-    const { message, stack, projectId, severity, environment } = req.body;
-    const validatedSeverity = validateSeverity(severity);
-    const validatedEnvironment = validateEnvironment(environment);
+    // Use the errorGrouper instance
+    const normalized = errorGrouper.normalize(message);
+    const groupingKey = errorGrouper.generateGroupingKey(message, stack);
 
-    const cleanMessage = message.trim();
-    const cleanStack = stack.trim();
-    const cleanProjectId = projectId.trim();
+    // Check if similar error exists
+    let error = await Error.findOne({ groupingKey });
 
-    const groupingKey = errorGrouper.generateGroupingKey(cleanMessage, cleanStack);
-    const errorPattern = errorGrouper.getErrorPattern(cleanMessage);
+    if (error) {
+      // Increment count for existing error
+      error.count += 1;
+      error.lastOccurrence = new Date();
+      await error.save();
 
-    const existingError = await Error.findOne({
-      projectId: cleanProjectId,
-      groupingKey,
-      severity: validatedSeverity,
-      environment: validatedEnvironment,
-    });
-
-    if (existingError) {
-      existingError.count += 1;
-      existingError.lastSeen = new Date();
-
-      if (cleanMessage !== existingError.message) {
-        const messageHash = crypto
-          .createHash("md5")
-          .update(cleanMessage)
-          .digest("hex");
-
-        const alreadyTracked = existingError.mergedWith.some(
-          (m) => m.originalMessage === cleanMessage
-        );
-
-        if (!alreadyTracked) {
-          existingError.mergedWith.push({
-            messageHash,
-            originalMessage: cleanMessage,
-            mergedAt: new Date(),
-          });
-        }
-      }
-
-      await existingError.save();
-
-      logger.info("Error logged (incremented)", {
-        errorId: existingError._id,
-        projectId: cleanProjectId,
-        severity: validatedSeverity,
-        environment: validatedEnvironment,
-        count: existingError.count,
-        groupingKey,
-      });
+      logger.info('Error count incremented', { groupingKey, count: error.count });
 
       return res.status(200).json({
         success: true,
-        message: "Error logged",
-        errorId: existingError._id,
-        count: existingError.count,
-        severity: existingError.severity,
-        environment: existingError.environment,
-        groupingKey,
-        errorPattern,
+        message: 'Error logged (grouped)',
+        error: {
+          _id: error._id,
+          message: error.message,
+          count: error.count,
+          groupingKey: error.groupingKey,
+        },
       });
     }
 
-    const newError = new Error({
-      message: cleanMessage,
-      stack: cleanStack,
-      projectId: cleanProjectId,
-      severity: validatedSeverity,
-      environment: validatedEnvironment,
+    // Create new error
+    error = new Error({
+      message,
+      normalizedMessage: normalized,
       groupingKey,
-      errorPattern,
-      mergedWith: [],
+      stack: stack || 'No stack trace provided',
+      projectId,
+      severity: severity || 'medium',
+      environment: environment || 'production',
+      status: 'new',
+      priority: 'medium',
+      count: 1,
     });
 
-    await newError.save();
+    await error.save();
 
-    logger.info("Error logged (new)", {
-      errorId: newError._id,
-      projectId: cleanProjectId,
-      severity: validatedSeverity,
-      environment: validatedEnvironment,
-      groupingKey,
-    });
+    logger.info('Error logged', { errorId: error._id, groupingKey });
 
     res.status(201).json({
       success: true,
-      message: "Error logged successfully",
-      errorId: newError._id,
-      severity: newError.severity,
-      environment: newError.environment,
-      count: newError.count,
-      groupingKey,
-      errorPattern,
+      message: 'Error logged successfully',
+      error: {
+        _id: error._id,
+        message: error.message,
+        severity: error.severity,
+        environment: error.environment,
+        count: error.count,
+        groupingKey: error.groupingKey,
+      },
     });
   } catch (error) {
-    logger.error("Error logging failed", {
-      message: error.message,
-      stack: error.stack,
+    logger.error('Error logging failed', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message,
     });
-
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        success: false,
-        error: "Validation failed",
-      });
-    }
-
-    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
-// GET /api/errors (with ADVANCED FILTERING)
-router.get("/", async (req, res) => {
+// GET /api/errors - Get all errors with advanced filtering
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const {
       projectId,
       severity,
-      environment,
       priority,
       status,
+      environment,
       limit = 50,
-      skip = 0,
+      page = 1,
     } = req.query;
 
-    if (!projectId) {
-      logger.warn("Errors fetch missing projectId");
-      return res.status(400).json({
+    // Build filter object
+    const filter = {};
+    if (projectId) filter.projectId = projectId;
+    if (severity) filter.severity = severity;
+    if (priority) filter.priority = priority;
+    if (status) filter.status = status;
+    if (environment) filter.environment = environment;
+
+    // Calculate pagination
+    const skip = (page - 1) * limit;
+
+    // Get errors with filter
+    const errors = await Error.find(filter)
+      .sort({ lastOccurrence: -1 })
+      .limit(parseInt(limit))
+      .skip(skip)
+      .select('-stack -aiExplanation')
+      .lean();
+
+    // Get total count
+    const total = await Error.countDocuments(filter);
+
+    logger.info('Errors fetched with filters', { filter, count: errors.length });
+
+    res.status(200).json({
+      success: true,
+      count: errors.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      errors,
+    });
+  } catch (error) {
+    logger.error('Error fetching errors', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message,
+    });
+  }
+});
+
+// GET /api/errors/:id - Get single error details
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const error = await Error.findById(req.params.id)
+      .populate('assignedTo', 'name email role')
+      .lean();
+
+    if (!error) {
+      return res.status(404).json({
         success: false,
-        error: "projectId is required",
+        message: 'Error not found',
       });
     }
 
-    // Build filter with ALL criteria
-    const query = { projectId: projectId.trim() };
+    logger.info('Error fetched', { errorId: req.params.id });
 
-    if (severity) {
-      query.severity = validateSeverity(severity);
-    }
+    res.status(200).json({
+      success: true,
+      error,
+    });
+  } catch (error) {
+    logger.error('Error fetching single error', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message,
+    });
+  }
+});
 
-    if (environment) {
-      query.environment = validateEnvironment(environment);
-    }
+// GET /api/errors/:id/details - Get error with complete timeline (error + comments + activity)
+router.get('/:id/details', authMiddleware, async (req, res) => {
+  try {
+    const errorId = req.params.id;
 
-    if (priority) {
-      const validPriorities = ["critical", "urgent", "high", "medium", "low"];
-      if (validPriorities.includes(priority.toLowerCase())) {
-        query.priority = priority.toLowerCase();
-      }
-    }
-
-    if (status) {
-      const validStatuses = ["new", "investigating", "resolved", "ignored"];
-      if (validStatuses.includes(status.toLowerCase())) {
-        query.status = status.toLowerCase();
-      }
-    }
-
-    const limitNum = Math.min(parseInt(limit) || 50, 100);
-    const skipNum = Math.max(parseInt(skip) || 0, 0);
-
-    const errors = await Error.find(query)
-      .sort({ lastSeen: -1 })
-      .limit(limitNum)
-      .skip(skipNum)
+    // Get error
+    const error = await Error.findById(errorId)
+      .populate('assignedTo', 'name email role')
       .lean();
 
-    const total = await Error.countDocuments(query);
+    if (!error) {
+      return res.status(404).json({ success: false, message: 'Error not found' });
+    }
 
-    const errorsWithGrouping = errors.map((err) => ({
-      _id: err._id,
-      message: err.message,
-      errorPattern: err.errorPattern,
-      groupingKey: err.groupingKey,
-      count: err.count,
-      severity: err.severity,
-      environment: err.environment,
-      priority: err.priority,
-      status: err.status,
-      firstSeen: err.firstSeen,
-      lastSeen: err.lastSeen,
-      mergedCount: err.mergedWith?.length || 0,
-      mergedExamples: err.mergedWith?.slice(0, 3).map((m) => m.originalMessage),
-    }));
+    // Get comments
+    const comments = await Comment.find({ errorId: errorId })
+      .sort({ createdAt: -1 })
+      .select('content author authorName authorEmail errorId createdAt updatedAt')
+      .lean();
 
-    logger.info("Errors fetched with filters", {
-      projectId,
-      severity: query.severity || "all",
-      environment: query.environment || "all",
-      priority: query.priority || "all",
-      status: query.status || "all",
-      returned: errors.length,
-      total,
+    // Get activity logs related to this error
+    const activities = await ActivityLog.find({
+      'metadata.errorId': errorId,
+    })
+      .populate('userId', 'name email')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Combine into timeline
+    const timeline = [];
+
+    // Add error creation event
+    timeline.push({
+      type: 'error_created',
+      timestamp: error.createdAt,
+      title: 'Error Created',
+      description: `${error.message} in ${error.environment}`,
+      user: null,
+      data: {
+        severity: error.severity,
+        environment: error.environment,
+        count: error.count,
+      },
     });
 
-    res.json({
+    // Add activity logs to timeline
+    activities.forEach((activity) => {
+      timeline.push({
+        type: 'activity',
+        timestamp: activity.createdAt,
+        title: activity.action,
+        description: activity.description,
+        user: activity.userId ? activity.userId.name : 'System',
+        userEmail: activity.userId ? activity.userId.email : null,
+        data: activity.metadata,
+      });
+    });
+
+    // Add comments to timeline
+    comments.forEach((comment) => {
+      timeline.push({
+        type: 'comment',
+        timestamp: comment.createdAt,
+        title: 'Comment Added',
+        description: comment.content,
+        user: comment.authorName,
+        userEmail: comment.authorEmail,
+        data: {
+          commentId: comment._id,
+        },
+      });
+    });
+
+    // Sort timeline by timestamp (newest first)
+    timeline.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    logger.info('Error details fetched', { errorId });
+
+    res.status(200).json({
       success: true,
-      data: errorsWithGrouping,
-      pagination: {
-        total,
-        limit: limitNum,
-        skip: skipNum,
-        hasMore: skipNum + limitNum < total,
+      data: {
+        error: {
+          _id: error._id,
+          message: error.message,
+          severity: error.severity,
+          priority: error.priority,
+          status: error.status,
+          environment: error.environment,
+          count: error.count,
+          assignedTo: error.assignedTo,
+          stack: error.stack,
+          aiExplanation: error.aiExplanation,
+          suggestedFixes: error.suggestedFixes,
+          createdAt: error.createdAt,
+          updatedAt: error.updatedAt,
+        },
+        comments: {
+          count: comments.length,
+          data: comments,
+        },
+        timeline: {
+          count: timeline.length,
+          events: timeline,
+        },
       },
     });
   } catch (error) {
-    logger.error("Error fetching failed", {
-      message: error.message,
-      stack: error.stack,
+    logger.error('Error fetching error details', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message,
     });
-    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
-// GET /api/errors/:id
-router.get("/:id", async (req, res) => {
+// POST /api/errors/:id/explain - Get AI explanation and fixes
+router.post('/:id/explain', authMiddleware, async (req, res) => {
   try {
-    const error = await Error.findById(req.params.id);
+    const errorId = req.params.id;
 
+    const error = await Error.findById(errorId);
     if (!error) {
-      logger.warn("Error not found", { errorId: req.params.id });
       return res.status(404).json({
         success: false,
-        error: "Error not found",
+        message: 'Error not found',
       });
     }
 
-    logger.info("Error fetched", { errorId: req.params.id });
+    // Check if already explained
+    if (error.aiExplanation) {
+      return res.status(200).json({
+        success: true,
+        message: 'Explanation already available',
+        explanation: error.aiExplanation,
+        suggestedFixes: error.suggestedFixes,
+      });
+    }
 
-    res.json({
+    // Get explanation from AI
+    const { explanation, fixes } = await explainError(error.message, error.stack);
+
+    // Save to database
+    error.aiExplanation = explanation;
+    error.suggestedFixes = fixes;
+    await error.save();
+
+    logger.info('Error explained', { errorId });
+
+    res.status(200).json({
       success: true,
-      data: error,
+      message: 'Explanation generated',
+      explanation,
+      suggestedFixes: fixes,
     });
   } catch (error) {
-    logger.error("Error fetch by ID failed", {
-      errorId: req.params.id,
-      message: error.message,
-    });
+    logger.error('Error explanation failed', { error: error.message });
     res.status(500).json({
       success: false,
-      error: "Internal server error",
+      message: 'Internal server error',
+      error: error.message,
     });
   }
 });
 
-// GET /api/errors/stats/:projectId
-router.get("/stats/:projectId", async (req, res) => {
+// GET /api/errors/stats/:projectId - Get error statistics
+router.get('/stats/:projectId', authMiddleware, async (req, res) => {
   try {
     const { projectId } = req.params;
 
-    const severityStats = await Error.aggregate([
+    const stats = await Error.aggregate([
       { $match: { projectId } },
       {
         $group: {
-          _id: "$severity",
-          count: { $sum: "$count" },
+          _id: null,
+          totalErrors: { $sum: 1 },
+          totalOccurrences: { $sum: '$count' },
+          bySeverity: {
+            $push: {
+              severity: '$severity',
+              count: '$count',
+            },
+          },
+          byPriority: {
+            $push: {
+              priority: '$priority',
+              count: '$count',
+            },
+          },
+          byStatus: {
+            $push: {
+              status: '$status',
+              count: '$count',
+            },
+          },
+          byEnvironment: {
+            $push: {
+              environment: '$environment',
+              count: '$count',
+            },
+          },
         },
       },
     ]);
 
-    const environmentStats = await Error.aggregate([
-      { $match: { projectId } },
-      {
-        $group: {
-          _id: "$environment",
-          count: { $sum: "$count" },
-        },
-      },
-    ]);
+    logger.info('Stats fetched', { projectId });
 
-    const formattedSeverity = { high: 0, medium: 0, low: 0, total: 0 };
-    severityStats.forEach((stat) => {
-      formattedSeverity[stat._id] = stat.count;
-      formattedSeverity.total += stat.count;
-    });
-
-    const formattedEnvironment = { development: 0, staging: 0, production: 0, total: 0 };
-    environmentStats.forEach((stat) => {
-      formattedEnvironment[stat._id] = stat.count;
-      formattedEnvironment.total += stat.count;
-    });
-
-    logger.info("Stats fetched", {
-      projectId,
-      totalErrors: formattedSeverity.total,
-    });
-
-    res.json({
+    res.status(200).json({
       success: true,
-      projectId,
-      stats: {
-        bySeverity: formattedSeverity,
-        byEnvironment: formattedEnvironment,
+      stats: stats[0] || {
+        totalErrors: 0,
+        totalOccurrences: 0,
       },
     });
   } catch (error) {
-    logger.error("Stats fetch failed", {
-      projectId: req.params.projectId,
-      message: error.message,
-    });
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
-
-// POST /api/errors/:id/explain
-router.post("/:id/explain", async (req, res) => {
-  try {
-    const error = await Error.findById(req.params.id);
-
-    if (!error) {
-      return res.status(404).json({
-        success: false,
-        error: "Error not found",
-      });
-    }
-
-    const aiResult = await aiExplainer.explainError(error.message, error.stack);
-
-    if (aiResult) {
-      error.aiExplanation = aiResult.explanation;
-      error.aiSuggestedFixes = aiResult.suggestedFixes;
-      await error.save();
-
-      logger.info("AI explanation generated", {
-        errorId: error._id,
-        hasExplanation: !!aiResult.explanation,
-        fixCount: aiResult.suggestedFixes.length,
-      });
-
-      return res.json({
-        success: true,
-        explanation: aiResult.explanation,
-        suggestedFixes: aiResult.suggestedFixes,
-      });
-    }
-
+    logger.error('Error fetching stats', { error: error.message });
     res.status(500).json({
       success: false,
-      error: "Failed to generate AI explanation",
-    });
-  } catch (error) {
-    logger.error("AI explanation failed", {
-      errorId: req.params.id,
-      message: error.message,
-    });
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
+      message: 'Internal server error',
+      error: error.message,
     });
   }
 });

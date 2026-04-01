@@ -118,3 +118,20 @@
 {"admin":"69ca0fa3224f66d33106f114","count":2,"level":"info","message":"Activity logs fetched","projectId":"project1","service":"bugscope-backend","timestamp":"2026-04-01 10:01:11"}
 {"admin":"69ca0fa3224f66d33106f114","level":"info","message":"Stats fetched","projectId":"project1","service":"bugscope-backend","timestamp":"2026-04-01 10:01:52"}
 {"email":"newcontrib@bugscope.com","level":"info","message":"User logged in","service":"bugscope-backend","timestamp":"2026-04-01 10:02:41","userId":"69cc9df58b8fcbab5d022261"}
+{"level":"info","message":"Server running on port 5000","service":"bugscope-backend","timestamp":"2026-04-01 13:25:02"}
+{"level":"info","message":"Server running on port 5000","service":"bugscope-backend","timestamp":"2026-04-01 13:25:06"}
+{"level":"info","message":"Server running on port 5000","service":"bugscope-backend","timestamp":"2026-04-01 13:25:30"}
+{"level":"info","message":"Server running on port 5000","service":"bugscope-backend","timestamp":"2026-04-01 13:25:43"}
+{"level":"info","message":"Server running on port 5000","service":"bugscope-backend","timestamp":"2026-04-01 13:33:13"}
+{"level":"info","message":"Server running on port 5000","service":"bugscope-backend","timestamp":"2026-04-01 14:43:46"}
+{"email":"admin1@bugscope.com","level":"info","message":"User logged in","service":"bugscope-backend","timestamp":"2026-04-01 14:47:19","userId":"69ca0fa3224f66d33106f114"}
+{"email":"newcontrib@bugscope.com","level":"info","message":"User logged in","service":"bugscope-backend","timestamp":"2026-04-01 14:48:13","userId":"69cc9df58b8fcbab5d022261"}
+{"count":16,"filter":{},"level":"info","message":"Errors fetched with filters","service":"bugscope-backend","timestamp":"2026-04-01 15:35:36"}
+{"count":16,"filter":{},"level":"info","message":"Errors fetched with filters","service":"bugscope-backend","timestamp":"2026-04-01 15:35:58"}
+{"level":"info","message":"Server running on port 5000","service":"bugscope-backend","timestamp":"2026-04-01 15:37:48"}
+{"level":"info","message":"Server running on port 5000","service":"bugscope-backend","timestamp":"2026-04-01 15:39:07"}
+{"level":"info","message":"Server running on port 5000","service":"bugscope-backend","timestamp":"2026-04-01 15:39:11"}
+{"errorId":"69cc2031128f7b3dc6d204e5","level":"info","message":"Error details fetched","service":"bugscope-backend","timestamp":"2026-04-01 15:43:14"}
+{"assignedBy":"69ca0fa3224f66d33106f114","assignedTo":"69ca0fa3224f66d33106f115","errorId":"69cc2031128f7b3dc6d204e5","level":"info","message":"Error assigned","service":"bugscope-backend","timestamp":"2026-04-01 15:46:37"}
+{"error":"normalizeError is not a function","level":"error","message":"Error logging failed","service":"bugscope-backend","timestamp":"2026-04-01 15:47:59"}
+{"level":"info","message":"Server running on port 5000","service":"bugscope-backend","timestamp":"2026-04-01 16:27:29"}

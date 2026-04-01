@@ -6,6 +6,7 @@ const connectDB = require("./config/db");
 const errorRoutes = require("./routes/errorRoutes");
 const authRoutes = require("./routes/authRoutes");
 const invitationRoutes = require("./routes/invitationRoutes");
+const commentRoutes = require('./routes/commentRoutes');
 const priorityRoutes = require("./routes/priorityRoutes");
 const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
@@ -56,8 +57,10 @@ app.use("/api/errors", errorRoutes);
 app.use("/api/errors", priorityRoutes);
 app.use("/auth", authRoutes);
 app.use("/api/invitations", invitationRoutes);
+app.use("/api", commentRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
+
 
 // Health check endpoint
 app.get("/health", (req, res) => {

@@ -13,7 +13,16 @@ function authMiddleware(req, res, next) {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+    
+    // FIX: Map userId from token to _id and id
+    req.user = {
+      _id: decoded.userId,  // ← Convert userId to _id
+      id: decoded.userId,   // ← Also set id
+      userId: decoded.userId,
+      email: decoded.email,
+      role: decoded.role,
+    };
+    
     next();
   } catch (error) {
     logger.error("Auth verification failed", { error: error.message });
