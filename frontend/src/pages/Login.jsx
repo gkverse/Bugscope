@@ -3,19 +3,35 @@ import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { Activity, GitBranch, Mail, Loader } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { authAPI } from '../api/api';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setError('');
     setIsAuthenticating(true);
-    setTimeout(() => {
-       navigate('/app/dashboard');
-    }, 1500); // Simulate connection and spinning up backend
+
+    try {
+      const response = await authAPI.login(email, password);
+      
+      // Store token
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      
+      // Navigate to dashboard
+      navigate('/app/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Login failed. Check credentials.');
+      console.error('Login error:', err);
+    } finally {
+      setIsAuthenticating(false);
+    }
   };
 
   return (
@@ -29,7 +45,7 @@ export const Login = () => {
 
       <div className="w-full max-w-6xl mx-auto flex flex-col lg:flex-row items-center gap-16 z-10">
         
-        {/* Left Side: Hero Text from Stitch */}
+        {/* Left Side: Hero Text */}
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -79,6 +95,12 @@ export const Login = () => {
               </p>
             </div>
 
+            {error && (
+              <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded text-red-200 text-sm">
+                {error}
+              </div>
+            )}
+
           <form className="mt-8 space-y-6" onSubmit={handleLogin}>
             <div className="space-y-4">
               <div>
@@ -90,6 +112,7 @@ export const Login = () => {
                   className="mt-1 w-full bg-surface-container-lowest border-b-2 border-outline-variant/30 text-white p-3 focus:outline-none focus:border-purple-500 transition-colors placeholder-on-surface-variant/30"
                   placeholder="architect@company.com"
                   required
+                  disabled={isAuthenticating}
                 />
               </div>
               <div>
@@ -104,6 +127,7 @@ export const Login = () => {
                   className="mt-1 w-full bg-surface-container-lowest border-b-2 border-outline-variant/30 text-white p-3 focus:outline-none focus:border-purple-500 transition-colors placeholder-on-surface-variant/30"
                   placeholder="••••••••••••"
                   required
+                  disabled={isAuthenticating}
                 />
               </div>
             </div>
