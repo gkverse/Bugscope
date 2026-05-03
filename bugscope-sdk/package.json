@@ -1,0 +1,27 @@
+{
+  "name": "@bugscope/sdk",
+  "version": "1.0.0",
+  "description": "BugScope - Lightweight Error Tracking SDK",
+  "main": "index.js",
+  "module": "index.js",
+  "keywords": [
+    "error-tracking",
+    "debugging",
+    "javascript",
+    "sdk"
+  ],
+  "author": "BugScope Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gkverse/Bugscope.git"
+  },
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

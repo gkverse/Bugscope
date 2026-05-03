@@ -13,7 +13,7 @@ window.initBugScope = function (config) {
     return;
   }
 
-  console.log("🐛 BugScope initialized for", bugScopeConfig.projectId);
+  console.log(" BugScope initialized for", bugScopeConfig.projectId);
 
   window.addEventListener("error", (event) => {
     handleError({
