@@ -148,5 +148,54 @@ router.post("/logout", authMiddleware, (req, res) => {
     message: "Logged out successfully",
   });
 });
+// POST /auth/signup
+router.post("/signup", async (req, res) => {
+  try {
+    const { email, password, name, role } = req.body;
 
+    if (!email || !password || !name) {
+      return res.status(400).json({
+        success: false,
+        error: "email, password, and name are required"
+      });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        error: "Email already registered"
+      });
+    }
+
+    const newUser = new User({
+      email,
+      password,
+      name,
+      projectId: "project1",
+      role: role || "contributor"
+    });
+
+    await newUser.save();
+
+    const token = generateToken(newUser._id, newUser.email, newUser.role);
+
+    logger.info("User registered", { userId: newUser._id, email: newUser.email });
+
+    res.status(201).json({
+      success: true,
+      message: "User registered successfully",
+      token,
+      user: {
+        id: newUser._id,
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role
+      }
+    });
+  } catch (error) {
+    logger.error("Signup failed", { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 module.exports = router;
