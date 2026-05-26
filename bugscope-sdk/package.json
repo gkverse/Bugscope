@@ -1,5 +1,5 @@
 {
-  "name": "@bugscope/sdk",
+  "name": "bugscope-sdk",
   "version": "1.0.0",
   "description": "BugScope - Lightweight Error Tracking SDK",
   "main": "index.js",

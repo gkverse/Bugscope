@@ -25,7 +25,7 @@ function initBugScope(config) {
     return false;
   }
 
-  console.log("🐛 BugScope SDK initialized successfully!");
+  console.log("   BugScope SDK initialized successfully!");
   console.log(`   Project: ${bugScopeConfig.projectId}`);
   console.log(`   Environment: ${bugScopeConfig.environment}`);
   console.log(`   Backend: ${bugScopeConfig.backendUrl}`);
