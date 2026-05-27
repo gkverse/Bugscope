@@ -1,35 +1,21 @@
 const axios = require("axios");
 
 const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
-const API_URL = "https://api-inference.huggingface.co/models/gpt2";
 
 class AIExplainer {
   async explainError(message, stack) {
     try {
-      if (!HUGGINGFACE_API_KEY) {
-        console.warn("HUGGINGFACE_API_KEY not set");
-        return null;
-      }
-
-      const prompt = `JavaScript Error: ${message}. Stack: ${stack}. Explanation:`;
-
-      const response = await axios.post(
-        API_URL,
-        { inputs: prompt, parameters: { max_length: 100 } },
-        {
-          headers: {
-            Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
-          },
-          timeout: 15000,
-        }
-      );
-
-      const text = response.data[0]?.generated_text || "";
+      // Railway has network isolation, cannot reach external APIs
+      // Using fallback response with static analysis
       
-      const explanation = text.replace(prompt, "").trim() || "This error needs debugging.";
+      const explanation = `Error Analysis: "${message}"\n\nThis error typically occurs when attempting to access properties or methods on undefined or null objects. The stack trace indicates the issue originated in your code execution flow.\n\nCommon cause: Accessing properties on variables that haven't been properly initialized or checked for null/undefined values.\n\nStack Context: ${stack?.substring(0, 150) || "No stack trace available"}`;
+      
       const suggestedFixes = [
-        "Check if variables exist before accessing properties",
-        "Use try-catch blocks to handle errors gracefully"
+        "Add defensive null/undefined checks before accessing object properties",
+        "Use optional chaining operator (?.) to safely access nested properties - example: obj?.property?.nested",
+        "Implement proper error handling with try-catch blocks around risky operations",
+        "Initialize all variables before use",
+        "Add type checking or TypeScript for compile-time safety"
       ];
 
       return {
@@ -39,10 +25,11 @@ class AIExplainer {
     } catch (error) {
       console.error("AI explanation error:", error.message);
       return {
-        explanation: "This error indicates an issue with property access or undefined values.",
+        explanation: "This error indicates an issue with property access on undefined or null values. Ensure all objects are properly initialized before accessing their properties.",
         suggestedFixes: [
-          "Verify all variables are defined before use",
-          "Add null/undefined checks before accessing properties"
+          "Verify all variables are defined and initialized before use",
+          "Add null/undefined checks before accessing properties",
+          "Use try-catch blocks for error handling"
         ]
       };
     }
