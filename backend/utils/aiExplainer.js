@@ -20,13 +20,13 @@ class AIExplainer {
 
       return {
         explanation,
-        suggestedFixes,
+        fixes: suggestedFixes,
       };
     } catch (error) {
       console.error("AI explanation error:", error.message);
       return {
         explanation: "This error indicates an issue with property access on undefined or null values. Ensure all objects are properly initialized before accessing their properties.",
-        suggestedFixes: [
+        fixes: [
           "Verify all variables are defined and initialized before use",
           "Add null/undefined checks before accessing properties",
           "Use try-catch blocks for error handling"

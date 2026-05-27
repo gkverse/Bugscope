@@ -7,7 +7,7 @@ const { authMiddleware } = require('../middleware/auth');
 const { isAdmin } = require('../middleware/rbac');
 const { logActivity } = require('../middleware/activityLogger');
 const errorGrouper = require('../utils/errorGrouping');
-const { explainError } = require('../utils/aiExplainer');
+const aiExplainer = require('../utils/aiExplainer');
 const logger = require('../config/logger');
 
 // POST /api/errors/log - Log a new error
@@ -315,7 +315,7 @@ router.post('/:id/explain', authMiddleware, async (req, res) => {
     }
 
     // Get explanation from AI
-    const aiResult = await explainError(error.message, error.stack);
+    const aiResult = await aiExplainer.explainError(error.message, error.stack);
     
     // Fallback if AI returns null or empty
     const explanation = aiResult?.explanation || `Error: ${error.message}. This typically occurs when accessing undefined properties. Ensure variables are properly initialized before use.`;
