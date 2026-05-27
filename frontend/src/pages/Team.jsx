@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { GlassPanel } from '../components/GlassPanel';
 import { Button } from '../components/ui/Button';
-import { UserPlus, Shield, MoreVertical, Loader } from 'lucide-react';
+import { UserPlus, Shield, MoreVertical, Loader, X, Mail } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -11,6 +11,11 @@ export const Team = () => {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState(null);
+  const [inviteSuccess, setInviteSuccess] = useState(null);
 
   useEffect(() => {
     const fetchMembers = async () => {
@@ -30,6 +35,45 @@ export const Team = () => {
     };
     fetchMembers();
   }, []);
+
+  const handleInvite = async (e) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) {
+      setInviteError('Email is required');
+      return;
+    }
+
+    try {
+      setInviteLoading(true);
+      setInviteError(null);
+      setInviteSuccess(null);
+
+      const token = localStorage.getItem('token');
+      const res = await axios.post(
+        `${API_URL}/api/invitations/send`,
+        {
+          email: inviteEmail,
+          projectId: 'project1',
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (res.data.success) {
+        setInviteSuccess(`Invitation sent to ${inviteEmail}`);
+        setInviteEmail('');
+        setTimeout(() => {
+          setShowInviteModal(false);
+          setInviteSuccess(null);
+        }, 2000);
+      }
+    } catch (err) {
+      setInviteError(err.response?.data?.error || 'Failed to send invitation');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
 
   return (
     <div className="p-10 max-w-6xl mx-auto">
@@ -52,13 +96,86 @@ export const Team = () => {
         </motion.div>
 
         <Button
-          onClick={() => alert('Invite feature coming soon.')}
+          onClick={() => setShowInviteModal(true)}
           className="gap-2"
         >
           <UserPlus size={16} />
           EXPAND UNIT ACCESS
         </Button>
       </div>
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowInviteModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-8 max-w-md w-full"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-display text-xl font-bold text-white">
+                Invite Team Member
+              </h2>
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="text-on-surface-variant hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleInvite} className="flex flex-col gap-4">
+              <div>
+                <label className="text-xs uppercase font-display tracking-widest text-on-surface-variant mb-2 block">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50" />
+                  <input
+                    type="email"
+                    placeholder="newmember@bugscope.com"
+                    value={inviteEmail}
+                    onChange={(e) => {
+                      setInviteEmail(e.target.value);
+                      setInviteError(null);
+                    }}
+                    className="w-full pl-9 pr-4 py-2 bg-surface-container-lowest border border-outline-variant/30 text-white rounded-sm focus:outline-none focus:border-primary transition-colors"
+                  />
+                </div>
+              </div>
+
+              {inviteError && (
+                <div className="text-error text-sm bg-error/10 border border-error/20 rounded p-2">
+                  {inviteError}
+                </div>
+              )}
+
+              {inviteSuccess && (
+                <div className="text-tertiary text-sm bg-tertiary/10 border border-tertiary/20 rounded p-2">
+                  ✓ {inviteSuccess}
+                </div>
+              )}
+
+              <Button type="submit" disabled={inviteLoading} fullWidth className="mt-2">
+                {inviteLoading ? (
+                  <span className="flex items-center gap-2">
+                    <Loader size={14} className="animate-spin" />
+                    Sending...
+                  </span>
+                ) : (
+                  'Send Invitation'
+                )}
+              </Button>
+            </form>
+          </motion.div>
+        </motion.div>
+      )}
 
       {/* Member Table */}
       <GlassPanel className="p-0 border-outline-variant/30 mb-8">
