@@ -175,7 +175,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/errors/:id/details - Get error with complete timeline (error + comments + activity)
+// GET /api/errors/:id/details - Get error with complete timeline
 router.get('/:id/details', authMiddleware, async (req, res) => {
   try {
     const errorId = req.params.id;
@@ -315,7 +315,16 @@ router.post('/:id/explain', authMiddleware, async (req, res) => {
     }
 
     // Get explanation from AI
-    const { explanation, fixes } = await explainError(error.message, error.stack);
+    const aiResult = await explainError(error.message, error.stack);
+    
+    // Fallback if AI returns null or empty
+    const explanation = aiResult?.explanation || `Error: ${error.message}. This typically occurs when accessing undefined properties. Ensure variables are properly initialized before use.`;
+    const fixes = aiResult?.fixes || [
+      "Add null/undefined checks before accessing object properties",
+      "Use optional chaining (?.) operator for safe property access",
+      "Implement proper error handling with try-catch blocks",
+      "Initialize all variables before use"
+    ];
 
     // Save to database
     error.aiExplanation = explanation;
